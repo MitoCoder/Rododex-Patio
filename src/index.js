@@ -5,7 +5,6 @@ import ptBR from 'antd/locale/pt_BR';
 import App from './App';
 import './styles/global.css';
 
-// Configuração do tema em português do Brasil
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>

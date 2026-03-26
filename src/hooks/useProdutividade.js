@@ -12,15 +12,17 @@ function useProdutividade() {
    * Normaliza os campos do conferente vindo do AppScript
    */
   const normalizarConferente = (dados) => {
+    if (!dados) return null;
+    
     return {
-      id: dados.id,
-      nome: dados.nome,
-      codigo: dados.código || dados.codigo,
-      metaDiaria: dados.meta_diária || dados.meta_diaria || 0,
-      status: dados.status,
-      dataCadastro: dados.data_cadastro,
-      usuarioSSW: dados.usuário_ssw || dados.usuario_ssw,
-      senhaSSW: dados.senha_ssw,
+      id: dados.id || 0,
+      nome: dados.nome || 'Conferente',
+      codigo: dados.código || dados.codigo || '---',
+      metaDiaria: dados.meta_diária || dados.meta_diaria || 200,
+      status: dados.status || 'offline',
+      dataCadastro: dados.data_cadastro || new Date().toISOString(),
+      usuarioSSW: dados.usuário_ssw || dados.usuario_ssw || '',
+      senhaSSW: dados.senha_ssw || '',
       produtividade: dados.produtividade || 0,
       totalConferencias: dados.total_conferencias || 0,
       ultimaAtualizacao: dados.ultima_atualizacao || '--/--/----'
@@ -37,15 +39,13 @@ function useProdutividade() {
       
       if (dados && Array.isArray(dados) && dados.length > 0) {
         console.log('✅ Dados brutos recebidos:', dados);
-        
-        // Normaliza os dados para o formato usado nos componentes
-        const conferentesNormalizados = dados.map(normalizarConferente);
+        const conferentesNormalizados = dados
+          .map(normalizarConferente)
+          .filter(conf => conf !== null);
         console.log('✅ Dados normalizados:', conferentesNormalizados);
-        
         setConferentes(conferentesNormalizados);
       } else {
-        console.warn('⚠️ Nenhum dado retornado');
-        setErro('Nenhum conferente encontrado');
+        console.warn('⚠️ Nenhum dado retornado, usando array vazio');
         setConferentes([]);
       }
       
@@ -58,29 +58,34 @@ function useProdutividade() {
     }
   }, []);
 
+  /**
+   * Atualiza a produtividade de um conferente específico
+   */
   const atualizarProdutividadeConferente = useCallback(async (conferente) => {
+    if (!conferente || !conferente.usuarioSSW) {
+      console.warn(`⚠️ Conferente sem credenciais: ${conferente?.nome}`);
+      return conferente;
+    }
+    
     try {
-      console.log(`📡 Consultando SSW para: ${conferente.nome}`);
+      console.log(`📡 Consultando SSW para: ${conferente.nome} (usuário: ${conferente.usuarioSSW})`);
       
-      // Obtém dados atualizados do sistema SSW
       const dadosSSW = await obterProdutividadeSSW(conferente);
       console.log(`📊 Dados do SSW para ${conferente.nome}:`, dadosSSW);
       
-      // Atualiza o conferente com os novos dados
       const conferenteAtualizado = {
         ...conferente,
-        produtividade: dadosSSW.produtividade,
-        totalConferencias: dadosSSW.totalConferencias,
+        produtividade: dadosSSW.produtividade || 0,
+        totalConferencias: dadosSSW.totalConferencias || 0,
         ultimaAtualizacao: new Date().toLocaleTimeString(),
-        status: dadosSSW.status
+        status: dadosSSW.status || conferente.status
       };
       
-      // Salva no AppScript (formato que o AppScript espera)
       await salvarProdutividade({
         id: conferente.id,
-        produtividade: dadosSSW.produtividade,
-        totalConferencias: dadosSSW.totalConferencias,
-        status: dadosSSW.status
+        produtividade: conferenteAtualizado.produtividade,
+        totalConferencias: conferenteAtualizado.totalConferencias,
+        status: conferenteAtualizado.status
       });
       
       return conferenteAtualizado;
@@ -90,6 +95,9 @@ function useProdutividade() {
     }
   }, []);
 
+  /**
+   * Atualiza todos os conferentes
+   */
   const atualizarDados = useCallback(async () => {
     if (!conferentes || conferentes.length === 0) {
       console.log('📭 Nenhum conferente para atualizar');
@@ -122,7 +130,8 @@ function useProdutividade() {
     carregando,
     erro,
     atualizarDados,
-    ultimaAtualizacao
+    ultimaAtualizacao,
+    recarregarConferentes: carregarConferentes
   };
 }
 

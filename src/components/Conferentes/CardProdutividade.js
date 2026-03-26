@@ -9,17 +9,23 @@ import {
 } from '@ant-design/icons';
 
 function CardProdutividade({ conferente }) {
+  // Verificar se conferente existe
+  if (!conferente) {
+    return null;
+  }
+
+  // Valores padrão para evitar undefined
   const {
-    nome,
-    codigo,
-    produtividade,
-    totalConferencias,
-    metaDiaria,
-    ultimaAtualizacao,
-    status
+    nome = 'Conferente',
+    codigo = '---',
+    produtividade = 0,
+    totalConferencias = 0,
+    metaDiaria = 200,
+    ultimaAtualizacao = '--/--/----',
+    status = 'offline'
   } = conferente;
 
-  const percentual = (produtividade / metaDiaria) * 100;
+  const percentual = metaDiaria > 0 ? (produtividade / metaDiaria) * 100 : 0;
   const estaAcimaDaMeta = produtividade >= metaDiaria;
   const corProgresso = estaAcimaDaMeta ? '#52c41a' : '#faad14';
 
@@ -42,12 +48,12 @@ function CardProdutividade({ conferente }) {
       hoverable
       style={{ borderRadius: 8 }}
       actions={[
-        <Tooltip title="Produtividade atual">
+        <Tooltip title="Produtividade atual" key="prod">
           <Space>
             <RiseOutlined /> {produtividade}/{metaDiaria}
           </Space>
         </Tooltip>,
-        <Tooltip title="Total de conferências">
+        <Tooltip title="Total de conferências" key="total">
           <Space>
             <ClockCircleOutlined /> {totalConferencias}
           </Space>
