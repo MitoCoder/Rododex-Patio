@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Table, Tag, Space, Button, message, Tabs, Card, Statistic, Row, Col, Tooltip } from 'antd';
-import { EyeOutlined, ReloadOutlined, CheckCircleOutlined, SettingOutlined, UserAddOutlined } from '@ant-design/icons';
+import { EyeOutlined, ReloadOutlined, CheckCircleOutlined, SettingOutlined, UserAddOutlined, ChromeOutlined } from '@ant-design/icons';
 import GerenciarConferentes from './GerenciarConferentes';
+import AbrirSSW from './AbrirSSW';
 
 function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando, onAtualizar }) {
   const [senha, setSenha] = useState('');
   const [autenticado, setAutenticado] = useState(false);
   const [dadosDetalhados, setDadosDetalhados] = useState([]);
   const [gerenciarVisivel, setGerenciarVisivel] = useState(false);
+  const [abrirSSWVisivel, setAbrirSSWVisivel] = useState(false);
 
   const SENHA_SUPERVISAO = 'supervisao';
 
@@ -80,10 +82,29 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
     {
       title: 'Dados do SSW',
       key: 'ssw',
-      width: 200,
+      width: 250,
       render: (_, record) => {
         const dados = dadosSSW[record.id];
         if (!dados) return <Tag color="gray">Aguardando consulta</Tag>;
+        
+        // Se tiver dados da tela de romaneio
+        if (dados.detalhes?.volumesLidos !== undefined) {
+          return (
+            <Space direction="vertical" size="small">
+              <Tooltip title="Volumes lidos / Total">
+                <Tag color="green">📦 {dados.detalhes.volumesLidos}/{dados.detalhes.totalVolumes}</Tag>
+              </Tooltip>
+              <Tooltip title="Placa do veículo">
+                <Tag color="blue">🚛 {dados.detalhes.placa || 'N/A'}</Tag>
+              </Tooltip>
+              <Tooltip title="Percentual concluído">
+                <Tag color="cyan">📊 {dados.detalhes.percentualConcluido || 0}%</Tag>
+              </Tooltip>
+            </Space>
+          );
+        }
+        
+        // Fallback para dados antigos
         return (
           <Space direction="vertical" size="small">
             <Tooltip title="Manifestos abertos">
@@ -114,7 +135,7 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
           dataSource={dadosDetalhados}
           loading={carregando}
           pagination={{ pageSize: 10 }}
-          scroll={{ x: 1000 }}
+          scroll={{ x: 1100 }}
           rowKey="id"
         />
       ),
@@ -212,6 +233,11 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
           onFechar={() => setGerenciarVisivel(false)}
           onConferentesAtualizados={onAtualizar}
         />
+        <AbrirSSW
+          visivel={abrirSSWVisivel}
+          onFechar={() => setAbrirSSWVisivel(false)}
+          conferentes={conferentes}
+        />
       </>
     );
   }
@@ -229,6 +255,15 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
               onClick={() => setGerenciarVisivel(true)}
             >
               Gerenciar Conferentes
+            </Button>
+            <Button 
+              type="default" 
+              size="small" 
+              icon={<ChromeOutlined />} 
+              onClick={() => setAbrirSSWVisivel(true)}
+              style={{ background: '#52c41a', color: 'white', borderColor: '#52c41a' }}
+            >
+              Abrir SSW
             </Button>
           </Space>
         }
@@ -256,6 +291,18 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
         visivel={gerenciarVisivel}
         onFechar={() => setGerenciarVisivel(false)}
         onConferentesAtualizados={onAtualizar}
+      />
+      
+      <AbrirSSW
+        visivel={abrirSSWVisivel}
+        onFechar={() => setAbrirSSWVisivel(false)}
+        conferentes={conferentes}
+        onDadosExtraidos={(dados, conferenteId) => {
+          console.log('Dados extraídos:', dados, 'para conferente:', conferenteId);
+          message.success(`Dados do SSW extraídos com sucesso!`);
+          // Aqui você pode chamar onAtualizar para recarregar os dados
+          onAtualizar();
+        }}
       />
     </>
   );

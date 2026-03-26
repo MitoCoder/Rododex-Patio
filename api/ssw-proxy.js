@@ -1,9 +1,8 @@
 // api/ssw-proxy.js
-// Scraping REAL do sistema SSW - Extrai dados da tela de carga de romaneio
-
-import * as cheerio from 'cheerio';
+// Função serverless que faz scraping REAL do sistema SSW
 
 export default async function handler(req, res) {
+  // Configurar CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -19,10 +18,14 @@ export default async function handler(req, res) {
   const { conferente } = req.body;
 
   if (!conferente || !conferente.usuarioSSW) {
-    return res.status(400).json({ erro: 'Conferente sem credenciais' });
+    return res.status(200).json({
+      produtividade: 0,
+      totalConferencias: 0,
+      ultimaBipagem: new Date().toISOString(),
+      status: 'offline',
+      detalhes: { erro: 'Credenciais não informadas' }
+    });
   }
-
-  let cookies = [];
 
   try {
     console.log(`🔍 Iniciando scraping do SSW para: ${conferente.nome}`);
@@ -31,7 +34,7 @@ export default async function handler(req, res) {
     const BASE_URL = 'https://sistema.ssw.inf.br';
     const LOGIN_URL = `${BASE_URL}/bin/sswbar/login`;
     
-    // 1. Fazer login no sistema
+    // 1. Fazer login no sistema com as credenciais do conferente
     const loginResponse = await fetch(LOGIN_URL, {
       method: 'POST',
       headers: {
@@ -50,23 +53,29 @@ export default async function handler(req, res) {
     });
     
     const setCookie = loginResponse.headers.get('set-cookie');
-    if (setCookie) {
-      cookies = [setCookie];
-    }
+    const cookies = setCookie ? [setCookie] : [];
     
     if (loginResponse.status !== 302 && !loginResponse.ok) {
-      throw new Error(`Falha no login: ${loginResponse.status}`);
+      console.log(`❌ Login falhou para ${conferente.usuarioSSW}: ${loginResponse.status}`);
+      return res.status(200).json({
+        produtividade: 0,
+        totalConferencias: 0,
+        ultimaBipagem: new Date().toISOString(),
+        status: 'offline',
+        detalhes: { erro: `Login falhou: ${loginResponse.status}` }
+      });
     }
     
     console.log('✅ Login realizado com sucesso');
     
-    // 2. Acessar a tela de Carga de Romaneio
+    // 2. Acessar a tela de CARGA DE ROMANEIO
     const romaneioResponse = await fetch(`${BASE_URL}/bin/sswbar`, {
       method: 'POST',
       headers: {
         'Cookie': cookies.join('; '),
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
       body: new URLSearchParams({
         'act': 'carga_romaneio',
@@ -75,25 +84,45 @@ export default async function handler(req, res) {
     });
     
     const romaneioHtml = await romaneioResponse.text();
-    const $ = cheerio.load(romaneioHtml);
     
-    // 3. Extrair os dados da tela de carga de romaneio
-    const totalQtde = parseInt($('#total_qtde').text().trim()) || 0;
-    const capQtde = parseInt($('#cap_qtde').text().trim()) || 0;
-    const falQtde = parseInt($('#fal_qtde').text().trim()) || 0;
+    // 3. Extrair os dados usando regex (mais simples que cheerio)
+    const extractNumber = (html, id) => {
+      const regex = new RegExp(`<td id="${id}"[^>]*>([^<]+)</td>`);
+      const match = html.match(regex);
+      return match ? parseInt(match[1].trim()) || 0 : 0;
+    };
     
-    const totalPeso = parseFloat($('#total_peso').text().trim().replace(',', '.')) || 0;
-    const capPeso = parseFloat($('#cap_peso').text().trim().replace(',', '.')) || 0;
+    const extractFloat = (html, id) => {
+      const regex = new RegExp(`<td id="${id}"[^>]*>([^<]+)</td>`);
+      const match = html.match(regex);
+      if (match) {
+        const value = match[1].trim().replace(',', '.');
+        return parseFloat(value) || 0;
+      }
+      return 0;
+    };
     
-    const totalVlr = parseFloat($('#total_vlr').text().trim().replace(',', '.')) || 0;
-    const capVlr = parseFloat($('#cap_vlr').text().trim().replace(',', '.')) || 0;
+    const extractHidden = (html, id) => {
+      const regex = new RegExp(`<input type="hidden" name="${id}" id="${id}" value="([^"]+)"`);
+      const match = html.match(regex);
+      return match ? match[1] : '';
+    };
     
-    // Extrair informações adicionais
-    const placa = $('#placa').val() || $('#placa').text().trim() || 'N/A';
-    const usuario = $('#usuario').val() || 'conflts';
-    const filial = $('#filial').val() || 'LTS';
+    const totalQtde = extractNumber(romaneioHtml, 'total_qtde');
+    const capQtde = extractNumber(romaneioHtml, 'cap_qtde');
+    const falQtde = extractNumber(romaneioHtml, 'fal_qtde');
     
-    console.log(`📊 Dados extraídos:`);
+    const totalPeso = extractFloat(romaneioHtml, 'total_peso');
+    const capPeso = extractFloat(romaneioHtml, 'cap_peso');
+    
+    const totalVlr = extractFloat(romaneioHtml, 'total_vlr');
+    const capVlr = extractFloat(romaneioHtml, 'cap_vlr');
+    
+    const placa = extractHidden(romaneioHtml, 'placa') || 'N/A';
+    const filial = extractHidden(romaneioHtml, 'filial') || 'LTS';
+    const usuario = extractHidden(romaneioHtml, 'usuario') || conferente.usuarioSSW;
+    
+    console.log(`📊 Dados extraídos da tela de CARGA DE ROMANEIO:`);
     console.log(`   Placa: ${placa}`);
     console.log(`   Total volumes: ${totalQtde}`);
     console.log(`   Volumes lidos: ${capQtde}`);
@@ -101,18 +130,17 @@ export default async function handler(req, res) {
     console.log(`   Peso lido: ${capPeso} kg`);
     console.log(`   Valor lido: R$ ${capVlr}`);
     
-    // Calcular produtividade (volumes lidos)
+    // Calcular produtividade
     const produtividade = capQtde;
     const totalConferencias = capQtde;
     
-    // Determinar status
-    let status = 'ativo';
-    if (totalQtde === 0) {
+    let status = 'pausa';
+    if (totalQtde > 0 && capQtde < totalQtde) {
+      status = 'ativo';
+    } else if (capQtde === 0 && totalQtde === 0) {
       status = 'pausa';
     } else if (capQtde === totalQtde && totalQtde > 0) {
-      status = 'pausa'; // Concluiu o romaneio atual
-    } else if (capQtde > 0) {
-      status = 'ativo';
+      status = 'pausa';
     }
     
     const dadosProdutividade = {
@@ -141,10 +169,12 @@ export default async function handler(req, res) {
     
   } catch (erro) {
     console.error('❌ Erro no scraping do SSW:', erro);
-    return res.status(500).json({ 
-      erro: 'Falha ao obter dados do SSW',
-      detalhe: erro.message,
-      conferente: conferente?.nome
+    return res.status(200).json({
+      produtividade: 0,
+      totalConferencias: 0,
+      ultimaBipagem: new Date().toISOString(),
+      status: 'offline',
+      detalhes: { erro: erro.message }
     });
   }
 }
