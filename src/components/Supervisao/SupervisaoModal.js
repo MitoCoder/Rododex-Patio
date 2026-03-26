@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Table, Tag, Space, Button, message, Tabs, Card, Statistic, Row, Col, Tooltip } from 'antd';
-import { EyeOutlined, ReloadOutlined, CheckCircleOutlined, SettingOutlined, UserAddOutlined, ChromeOutlined } from '@ant-design/icons';
+import { EyeOutlined, ReloadOutlined, CheckCircleOutlined, UserAddOutlined, ChromeOutlined } from '@ant-design/icons';
 import GerenciarConferentes from './GerenciarConferentes';
 import AbrirSSW from './AbrirSSW';
 
@@ -87,7 +87,6 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
         const dados = dadosSSW[record.id];
         if (!dados) return <Tag color="gray">Aguardando consulta</Tag>;
         
-        // Se tiver dados da tela de romaneio
         if (dados.detalhes?.volumesLidos !== undefined) {
           return (
             <Space direction="vertical" size="small">
@@ -104,7 +103,6 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
           );
         }
         
-        // Fallback para dados antigos
         return (
           <Space direction="vertical" size="small">
             <Tooltip title="Manifestos abertos">
@@ -237,6 +235,11 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
           visivel={abrirSSWVisivel}
           onFechar={() => setAbrirSSWVisivel(false)}
           conferentes={conferentes}
+          onDadosExtraidos={(dados, conferenteId) => {
+            console.log('Dados extraídos:', dados);
+            message.success(`Dados do conferente extraídos com sucesso!`);
+            onAtualizar();
+          }}
         />
       </>
     );
@@ -298,9 +301,8 @@ function SupervisaoModal({ visivel, onFechar, conferentes, dadosSSW, carregando,
         onFechar={() => setAbrirSSWVisivel(false)}
         conferentes={conferentes}
         onDadosExtraidos={(dados, conferenteId) => {
-          console.log('Dados extraídos:', dados, 'para conferente:', conferenteId);
-          message.success(`Dados do SSW extraídos com sucesso!`);
-          // Aqui você pode chamar onAtualizar para recarregar os dados
+          console.log('Dados extraídos:', dados);
+          message.success(`Dados do conferente extraídos com sucesso!`);
           onAtualizar();
         }}
       />

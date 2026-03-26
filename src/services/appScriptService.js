@@ -1,49 +1,29 @@
 // Serviço para integração com Google AppScript
-const URL_APPSCRIPT = 'https://script.google.com/macros/s/AKfycbwlH2R7v73XXpJc0En27QC8arYpRrRHLNxIlgP8hCf5k4PJgK6qLFOGtieAz07HlxFljg/exec';
+// Usando proxy para evitar CORS
+const URL_APPSCRIPT = '/api/appscript-proxy';
 
 /**
  * Busca todos os conferentes cadastrados na planilha
  */
 export async function buscarConferentes() {
   try {
-    console.log('🔍 Buscando conferentes do AppScript...');
-    console.log('📡 URL:', `${URL_APPSCRIPT}?acao=listar`);
-    
+    console.log('🔍 Buscando conferentes via proxy...');
     const resposta = await fetch(`${URL_APPSCRIPT}?acao=listar`, {
       method: 'GET',
-      mode: 'cors',
       headers: {
         'Accept': 'application/json',
       }
     });
     
-    console.log('📊 Status da resposta:', resposta.status);
-    
     if (!resposta.ok) {
-      throw new Error(`Erro HTTP: ${resposta.status} - ${resposta.statusText}`);
+      throw new Error(`Erro HTTP: ${resposta.status}`);
     }
     
     const dados = await resposta.json();
-    console.log('📦 Dados brutos do AppScript:', dados);
-    
-    // Verificar se a resposta é um erro
-    if (dados && dados.erro) {
-      console.error('❌ AppScript retornou erro:', dados.erro);
-      throw new Error(dados.erro);
-    }
-    
-    // Garantir que sempre retornamos um array
-    if (!dados || !Array.isArray(dados)) {
-      console.warn('⚠️ AppScript não retornou um array, retornando array vazio');
-      return [];
-    }
-    
-    console.log(`✅ Conferentes carregados: ${dados.length} registros`);
-    return dados;
-    
+    console.log('✅ Conferentes carregados:', dados);
+    return Array.isArray(dados) ? dados : [];
   } catch (erro) {
     console.error('❌ Erro ao buscar conferentes:', erro);
-    // Retorna array vazio em caso de erro para não quebrar a aplicação
     return [];
   }
 }
@@ -56,7 +36,6 @@ export async function salvarProdutividade(dadosProdutividade) {
     console.log('💾 Salvando produtividade:', dadosProdutividade);
     const resposta = await fetch(URL_APPSCRIPT, {
       method: 'POST',
-      mode: 'cors',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -87,7 +66,6 @@ export async function salvarConferente(conferente) {
     console.log('💾 Salvando conferente:', conferente);
     const resposta = await fetch(URL_APPSCRIPT, {
       method: 'POST',
-      mode: 'cors',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -118,7 +96,6 @@ export async function deletarConferente(id) {
     console.log('🗑️ Deletando conferente ID:', id);
     const resposta = await fetch(URL_APPSCRIPT, {
       method: 'POST',
-      mode: 'cors',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -146,10 +123,9 @@ export async function deletarConferente(id) {
  */
 export async function atualizarStatus(conferenteId, status) {
   try {
-    console.log('🔄 Atualizando status do conferente:', conferenteId, '->', status);
+    console.log('🔄 Atualizando status:', conferenteId, '->', status);
     const resposta = await fetch(URL_APPSCRIPT, {
       method: 'POST',
-      mode: 'cors',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -180,7 +156,6 @@ export async function registrarConferencia(conferencia) {
     console.log('📝 Registrando conferência:', conferencia);
     const resposta = await fetch(URL_APPSCRIPT, {
       method: 'POST',
-      mode: 'cors',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -204,14 +179,13 @@ export async function registrarConferencia(conferencia) {
 }
 
 /**
- * Função auxiliar para testar conexão com AppScript
+ * Função auxiliar para testar conexão
  */
 export async function testarConexao() {
   try {
-    console.log('🔌 Testando conexão com AppScript...');
+    console.log('🔌 Testando conexão via proxy...');
     const resposta = await fetch(`${URL_APPSCRIPT}?acao=listar`, {
       method: 'GET',
-      mode: 'cors',
       headers: {
         'Accept': 'application/json',
       }

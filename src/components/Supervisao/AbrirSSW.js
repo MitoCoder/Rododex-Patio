@@ -9,16 +9,43 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
   const [extraindo, setExtraindo] = useState(false);
   const [conferenteAtual, setConferenteAtual] = useState(null);
 
+  // Log para debug
+  useEffect(() => {
+    console.log('📋 Conferentes recebidos no AbrirSSW:', conferentes);
+  }, [conferentes]);
+
+  // Quando o modal é aberto, resetar o estado
+  useEffect(() => {
+    if (visivel) {
+      setConferenteSelecionadoId(null);
+      setConferenteAtual(null);
+      setDadosExtraidos(null);
+      if (janelaSSW && !janelaSSW.closed) {
+        janelaSSW.close();
+        setJanelaSSW(null);
+      }
+    }
+  }, [visivel]);
+
+  // Monitorar estado para debug
+  useEffect(() => {
+    console.log('🟢 Estado atualizado:');
+    console.log('  conferenteSelecionadoId:', conferenteSelecionadoId);
+    console.log('  conferenteAtual:', conferenteAtual);
+    console.log('  usuarioSSW:', conferenteAtual?.usuarioSSW);
+    console.log('  botão deve estar habilitado:', !!conferenteAtual?.usuarioSSW);
+  }, [conferenteSelecionadoId, conferenteAtual]);
+
   // Atualizar conferente atual quando selecionado
   useEffect(() => {
-    console.log('Conferentes recebidos:', conferentes);
-    console.log('ID selecionado:', conferenteSelecionadoId);
+    console.log('🔍 ID selecionado:', conferenteSelecionadoId);
+    console.log('📋 Conferentes disponíveis:', conferentes);
     
     if (conferenteSelecionadoId && conferentes && conferentes.length > 0) {
-      // Converter para número se necessário
+      // Converter para número
       const idNumero = parseInt(conferenteSelecionadoId);
       const encontrado = conferentes.find(c => c.id === idNumero);
-      console.log('Conferente encontrado:', encontrado);
+      console.log('👤 Conferente encontrado:', encontrado);
       setConferenteAtual(encontrado || null);
     } else {
       setConferenteAtual(null);
@@ -26,15 +53,16 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
   }, [conferenteSelecionadoId, conferentes]);
 
   const abrirSSW = () => {
-    console.log('Tentando abrir SSW para conferente:', conferenteAtual);
+    console.log('🚀 Tentando abrir SSW para conferente:', conferenteAtual);
     
     if (!conferenteAtual) {
-      message.warning('Selecione um conferente');
+      message.warning('Selecione um conferente primeiro');
       return;
     }
 
     if (!conferenteAtual.usuarioSSW) {
-      message.error('Conferente não tem usuário SSW cadastrado! Vá em Gerenciar Conferentes e adicione o usuário e senha.');
+      message.error('Conferente não tem usuário SSW cadastrado!');
+      message.info('Vá em "Gerenciar Conferentes" e adicione o usuário e senha do SSW.');
       return;
     }
 
@@ -47,14 +75,14 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
     if (janela) {
       setJanelaSSW(janela);
       setDadosExtraidos(null);
-      message.info(`Janela aberta. Faça login como: ${conferenteAtual.usuarioSSW}`);
+      message.info(`Janela aberta! Faça login como: ${conferenteAtual.usuarioSSW}`);
       
-      // Aguardar a janela carregar e então preencher automaticamente
-      setTimeout(() => {
+      // Aguardar a janela carregar e tentar preencher automaticamente
+      const timer = setTimeout(() => {
         try {
           const doc = janela.document;
           
-          // Tentar preencher os campos automaticamente
+          // Tentar preencher os campos
           const dominio = doc.getElementById('dominio');
           const cpf = doc.getElementById('cpf');
           const usuario = doc.getElementById('usuario');
@@ -65,19 +93,29 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
           if (usuario) usuario.value = conferenteAtual.usuarioSSW;
           if (senha) senha.value = conferenteAtual.senhaSSW;
           
-          message.success('Credenciais preenchidas! Clique em "Entrar" e vá para a tela de Carga de Romaneio');
+          message.success('Credenciais preenchidas! Clique em "Entrar"');
         } catch (err) {
-          console.log('Não foi possível preencher automaticamente devido a restrições de segurança', err);
+          console.log('Não foi possível preencher automaticamente', err);
         }
       }, 1000);
+      
+      return () => clearTimeout(timer);
     } else {
-      message.error('Pop-up bloqueado. Permita pop-ups para este site.');
+      message.error('Pop-up bloqueado! Permita pop-ups para este site.');
     }
   };
 
   const extrairDados = () => {
-    if (!janelaSSW || janelaSSW.closed) {
-      message.error('Janela do SSW não está aberta');
+    console.log('📊 Tentando extrair dados da janela...');
+    
+    if (!janelaSSW) {
+      message.error('Nenhuma janela do SSW aberta');
+      return;
+    }
+    
+    if (janelaSSW.closed) {
+      message.error('A janela do SSW foi fechada');
+      setJanelaSSW(null);
       return;
     }
 
@@ -85,6 +123,13 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
 
     try {
       const doc = janelaSSW.document;
+      
+      // Verificar se está na página de login
+      if (doc.getElementById('dominio')) {
+        message.warning('Você ainda não fez login! Faça login primeiro.');
+        setExtraindo(false);
+        return;
+      }
       
       // Extrair dados da tela de carga de romaneio
       const totalQtde = doc.getElementById('total_qtde')?.innerText || '0';
@@ -100,10 +145,6 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
       const usuario = doc.getElementById('usuario')?.value || 'N/A';
       const filial = doc.getElementById('filial')?.value || 'N/A';
       
-      // Extrair também do texto da placa visível
-      const placaSpan = doc.querySelector('#placa')?.parentElement?.querySelector('.text-primary')?.innerText;
-      const placaFinal = placaSpan || placa;
-      
       const totalVolumes = parseInt(totalQtde) || 0;
       const volumesLidos = parseInt(capQtde) || 0;
       
@@ -115,7 +156,7 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
         ultimaBipagem: new Date().toISOString(),
         status: volumesLidos > 0 ? 'ativo' : 'pausa',
         detalhes: {
-          placa: placaFinal,
+          placa: placa,
           totalVolumes: totalVolumes,
           volumesLidos: volumesLidos,
           volumesFaltam: parseInt(falQtde) || 0,
@@ -129,17 +170,16 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
         }
       };
       
-      console.log('📊 Dados extraídos:', dados);
+      console.log('✅ Dados extraídos:', dados);
       setDadosExtraidos(dados);
-      message.success('Dados extraídos com sucesso!');
+      message.success(`Dados extraídos! ${volumesLidos}/${totalVolumes} volumes lidos.`);
       
-      // Chamar callback se existir
       if (onDadosExtraidos) {
         onDadosExtraidos(dados, conferenteAtual?.id);
       }
       
     } catch (err) {
-      console.error('Erro ao extrair dados:', err);
+      console.error('❌ Erro ao extrair dados:', err);
       message.error('Erro ao extrair dados. Certifique-se de que está na tela de Carga de Romaneio');
     } finally {
       setExtraindo(false);
@@ -160,7 +200,8 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
     label: `${c.nome || 'Sem nome'} (${c.usuarioSSW || 'sem usuário'})`
   })) || [];
 
-  console.log('Opções do dropdown:', opcoes);
+  console.log('📋 Opções do dropdown:', opcoes);
+  console.log('📋 Conferente selecionado ID:', conferenteSelecionadoId);
 
   return (
     <Modal
@@ -200,12 +241,11 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
           message="📌 Como usar:"
           description={
             <ol style={{ margin: '8px 0 0 20px', padding: 0 }}>
-              <li>Selecione o conferente abaixo</li>
+              <li>Selecione um conferente abaixo</li>
               <li>Clique em <strong>"Abrir SSW"</strong> (nova janela será aberta)</li>
               <li>As credenciais serão pré-preenchidas - clique em <strong>"Entrar"</strong></li>
               <li>Navegue até a tela de <strong>"Carga de Romaneio"</strong></li>
               <li>Clique em <strong>"Extrair Dados"</strong> para capturar os valores</li>
-              <li>Os dados aparecerão abaixo</li>
             </ol>
           }
           type="info"
@@ -219,8 +259,7 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
             placeholder="Selecione um conferente"
             options={opcoes}
             onChange={(value) => {
-              console.log('Valor selecionado (raw):', value);
-              console.log('Tipo do valor:', typeof value);
+              console.log('🖱️ Valor selecionado:', value);
               setConferenteSelecionadoId(value);
             }}
             value={conferenteSelecionadoId}
@@ -232,10 +271,21 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
         </div>
         
         {conferenteAtual && (
-          <div style={{ marginBottom: 16, padding: 8, background: '#f5f5f5', borderRadius: 4 }}>
-            <strong>Conferente selecionado:</strong> {conferenteAtual.nome}<br />
-            <strong>Usuário SSW:</strong> {conferenteAtual.usuarioSSW || <Tag color="red">Não cadastrado</Tag>}
+          <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 8, border: '1px solid #91d5ff' }}>
+            <strong>✅ Conferente selecionado:</strong><br />
+            Nome: {conferenteAtual.nome}<br />
+            Usuário SSW: <Tag color="blue">{conferenteAtual.usuarioSSW || 'Não cadastrado'}</Tag>
           </div>
+        )}
+        
+        {!conferenteAtual && conferenteSelecionadoId && (
+          <Alert
+            message="⚠️ Conferente não encontrado"
+            description={`ID selecionado: ${conferenteSelecionadoId}. Verifique se o conferente foi cadastrado corretamente.`}
+            type="warning"
+            style={{ marginBottom: 16 }}
+            showIcon
+          />
         )}
         
         <Button 
@@ -249,16 +299,6 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
         >
           Abrir SSW {conferenteAtual && conferenteAtual.usuarioSSW ? `(${conferenteAtual.usuarioSSW})` : ''}
         </Button>
-        
-        {!conferenteAtual && conferenteSelecionadoId && (
-          <Alert
-            message="⚠️ Conferente não encontrado"
-            description={`ID selecionado: ${conferenteSelecionadoId}. Verifique se o conferente foi cadastrado corretamente.`}
-            type="warning"
-            style={{ marginBottom: 16 }}
-            showIcon
-          />
-        )}
         
         {janelaSSW && !janelaSSW.closed && (
           <Alert
