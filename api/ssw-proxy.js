@@ -1,10 +1,9 @@
 // api/ssw-proxy.js
-// Scraping REAL do sistema SSW
+// Scraping REAL do sistema SSW - Extrai dados da tela de carga de romaneio
 
 import * as cheerio from 'cheerio';
 
 export default async function handler(req, res) {
-  // Configurar CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -19,24 +18,18 @@ export default async function handler(req, res) {
 
   const { conferente } = req.body;
 
+  if (!conferente || !conferente.usuarioSSW) {
+    return res.status(400).json({ erro: 'Conferente sem credenciais' });
+  }
+
+  let cookies = [];
+
   try {
     console.log(`🔍 Iniciando scraping do SSW para: ${conferente.nome}`);
+    console.log(`👤 Usuário: ${conferente.usuarioSSW}`);
     
     const BASE_URL = 'https://sistema.ssw.inf.br';
     const LOGIN_URL = `${BASE_URL}/bin/sswbar/login`;
-    
-    // Credenciais individuais do conferente
-    const credenciais = {
-      dominio: 'ET1',
-      cpf: '11152463802',
-      usuario: conferente.usuarioSSW,
-      senha: conferente.senhaSSW
-    };
-    
-    console.log(`👤 Logando com usuário: ${credenciais.usuario}`);
-    
-    // Criar uma sessão com cookies
-    let cookies = [];
     
     // 1. Fazer login no sistema
     const loginResponse = await fetch(LOGIN_URL, {
@@ -45,19 +38,17 @@ export default async function handler(req, res) {
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
       },
       redirect: 'manual',
       body: new URLSearchParams({
-        'dominio': credenciais.dominio,
-        'cpf': credenciais.cpf,
-        'usuario': credenciais.usuario,
-        'senha': credenciais.senha,
+        'dominio': 'ET1',
+        'cpf': '11152463802',
+        'usuario': conferente.usuarioSSW,
+        'senha': conferente.senhaSSW,
         'act': ''
       })
     });
     
-    // Extrair cookies da resposta
     const setCookie = loginResponse.headers.get('set-cookie');
     if (setCookie) {
       cookies = [setCookie];
@@ -69,39 +60,59 @@ export default async function handler(req, res) {
     
     console.log('✅ Login realizado com sucesso');
     
-    // 2. Acessar o menu principal
-    const menuResponse = await fetch(`${BASE_URL}/bin/sswbar/menu`, {
+    // 2. Acessar a tela de Carga de Romaneio
+    const romaneioResponse = await fetch(`${BASE_URL}/bin/sswbar`, {
+      method: 'POST',
       headers: {
         'Cookie': cookies.join('; '),
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      }
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'act': 'carga_romaneio',
+        'dummy': Date.now().toString()
+      })
     });
     
-    const menuHtml = await menuResponse.text();
-    const $ = cheerio.load(menuHtml);
+    const romaneioHtml = await romaneioResponse.text();
+    const $ = cheerio.load(romaneioHtml);
     
-    // 3. Extrair os contadores de produtividade
-    const manifestosAbertos = $('#btn_carga_manifesto_aberto').text().trim() || '0';
-    const romaneiosAbertos = $('#btn_carga_romaneio_aberto').text().trim() || '0';
+    // 3. Extrair os dados da tela de carga de romaneio
+    const totalQtde = parseInt($('#total_qtde').text().trim()) || 0;
+    const capQtde = parseInt($('#cap_qtde').text().trim()) || 0;
+    const falQtde = parseInt($('#fal_qtde').text().trim()) || 0;
     
-    // Extrair informações do usuário
-    const userInfo = $('#dropdownMenuButton').parent().find('.dropdown-item-text').text();
-    const filialMatch = userInfo.match(/Filial:\s*<b>([^<]+)<\/b>/);
-    const filial = filialMatch ? filialMatch[1] : 'LTS';
+    const totalPeso = parseFloat($('#total_peso').text().trim().replace(',', '.')) || 0;
+    const capPeso = parseFloat($('#cap_peso').text().trim().replace(',', '.')) || 0;
     
-    console.log(`📊 Manifestos abertos: ${manifestosAbertos}`);
-    console.log(`📊 Romaneios abertos: ${romaneiosAbertos}`);
+    const totalVlr = parseFloat($('#total_vlr').text().trim().replace(',', '.')) || 0;
+    const capVlr = parseFloat($('#cap_vlr').text().trim().replace(',', '.')) || 0;
     
-    // Calcular produtividade estimada
-    const manifestos = parseInt(manifestosAbertos) || 0;
-    const romaneios = parseInt(romaneiosAbertos) || 0;
-    const produtividade = (manifestos * 25) + (romaneios * 20);
-    const totalConferencias = produtividade;
+    // Extrair informações adicionais
+    const placa = $('#placa').val() || $('#placa').text().trim() || 'N/A';
+    const usuario = $('#usuario').val() || 'conflts';
+    const filial = $('#filial').val() || 'LTS';
+    
+    console.log(`📊 Dados extraídos:`);
+    console.log(`   Placa: ${placa}`);
+    console.log(`   Total volumes: ${totalQtde}`);
+    console.log(`   Volumes lidos: ${capQtde}`);
+    console.log(`   Volumes faltam: ${falQtde}`);
+    console.log(`   Peso lido: ${capPeso} kg`);
+    console.log(`   Valor lido: R$ ${capVlr}`);
+    
+    // Calcular produtividade (volumes lidos)
+    const produtividade = capQtde;
+    const totalConferencias = capQtde;
     
     // Determinar status
     let status = 'ativo';
-    if (manifestos === 0 && romaneios === 0) {
+    if (totalQtde === 0) {
       status = 'pausa';
+    } else if (capQtde === totalQtde && totalQtde > 0) {
+      status = 'pausa'; // Concluiu o romaneio atual
+    } else if (capQtde > 0) {
+      status = 'ativo';
     }
     
     const dadosProdutividade = {
@@ -110,14 +121,21 @@ export default async function handler(req, res) {
       ultimaBipagem: new Date().toISOString(),
       status: status,
       detalhes: {
-        manifestosAbertos: manifestosAbertos,
-        romaneiosAbertos: romaneiosAbertos,
+        placa: placa,
+        totalVolumes: totalQtde,
+        volumesLidos: capQtde,
+        volumesFaltam: falQtde,
+        pesoLido: capPeso,
+        pesoTotal: totalPeso,
+        valorLido: capVlr,
+        valorTotal: totalVlr,
         filial: filial,
-        usuarioLogado: credenciais.usuario
+        usuarioLogado: usuario,
+        percentualConcluido: totalQtde > 0 ? ((capQtde / totalQtde) * 100).toFixed(1) : 0
       }
     };
     
-    console.log(`✅ Dados extraídos para ${conferente.nome}:`, dadosProdutividade);
+    console.log(`✅ Produtividade para ${conferente.nome}: ${capQtde}/${totalQtde} volumes (${dadosProdutividade.detalhes.percentualConcluido}%)`);
     
     return res.status(200).json(dadosProdutividade);
     
