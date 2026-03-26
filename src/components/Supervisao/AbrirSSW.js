@@ -9,9 +9,30 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
   const [extraindo, setExtraindo] = useState(false);
   const [conferenteAtual, setConferenteAtual] = useState(null);
 
+  // Função para normalizar os campos do conferente
+  const normalizarConferente = (conf) => {
+    if (!conf) return null;
+    return {
+      id: conf.id,
+      nome: conf.nome,
+      codigo: conf.codigo || conf.código,
+      metaDiaria: conf.metaDiaria || conf.meta_diária,
+      status: conf.status,
+      // Normalizar o campo de usuário SSW (pode vir com acento ou sem)
+      usuarioSSW: conf.usuarioSSW || conf.usuário_ssw || conf.usuario_ssw || '',
+      senhaSSW: conf.senhaSSW || conf.senha_ssw || '',
+      produtividade: conf.produtividade || 0,
+      totalConferencias: conf.totalConferencias || conf.total_conferencias || 0,
+      ultimaAtualizacao: conf.ultimaAtualizacao || conf.ultima_atualizacao
+    };
+  };
+
   // Log para debug
   useEffect(() => {
-    console.log('📋 Conferentes recebidos no AbrirSSW:', conferentes);
+    if (conferentes && conferentes.length > 0) {
+      console.log('📋 Conferentes recebidos no AbrirSSW:', conferentes);
+      console.log('📋 Primeiro conferente normalizado:', normalizarConferente(conferentes[0]));
+    }
   }, [conferentes]);
 
   // Quando o modal é aberto, resetar o estado
@@ -27,26 +48,21 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
     }
   }, [visivel]);
 
-  // Monitorar estado para debug
-  useEffect(() => {
-    console.log('🟢 Estado atualizado:');
-    console.log('  conferenteSelecionadoId:', conferenteSelecionadoId);
-    console.log('  conferenteAtual:', conferenteAtual);
-    console.log('  usuarioSSW:', conferenteAtual?.usuarioSSW);
-    console.log('  botão deve estar habilitado:', !!conferenteAtual?.usuarioSSW);
-  }, [conferenteSelecionadoId, conferenteAtual]);
-
   // Atualizar conferente atual quando selecionado
   useEffect(() => {
     console.log('🔍 ID selecionado:', conferenteSelecionadoId);
     console.log('📋 Conferentes disponíveis:', conferentes);
     
     if (conferenteSelecionadoId && conferentes && conferentes.length > 0) {
-      // Converter para número
       const idNumero = parseInt(conferenteSelecionadoId);
       const encontrado = conferentes.find(c => c.id === idNumero);
-      console.log('👤 Conferente encontrado:', encontrado);
-      setConferenteAtual(encontrado || null);
+      if (encontrado) {
+        const normalizado = normalizarConferente(encontrado);
+        console.log('👤 Conferente encontrado e normalizado:', normalizado);
+        setConferenteAtual(normalizado);
+      } else {
+        setConferenteAtual(null);
+      }
     } else {
       setConferenteAtual(null);
     }
@@ -82,7 +98,6 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
         try {
           const doc = janela.document;
           
-          // Tentar preencher os campos
           const dominio = doc.getElementById('dominio');
           const cpf = doc.getElementById('cpf');
           const usuario = doc.getElementById('usuario');
@@ -124,14 +139,12 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
     try {
       const doc = janelaSSW.document;
       
-      // Verificar se está na página de login
       if (doc.getElementById('dominio')) {
         message.warning('Você ainda não fez login! Faça login primeiro.');
         setExtraindo(false);
         return;
       }
       
-      // Extrair dados da tela de carga de romaneio
       const totalQtde = doc.getElementById('total_qtde')?.innerText || '0';
       const capQtde = doc.getElementById('cap_qtde')?.innerText || '0';
       const falQtde = doc.getElementById('fal_qtde')?.innerText || '0';
@@ -140,7 +153,6 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
       const totalVlr = doc.getElementById('total_vlr')?.innerText || '0';
       const capVlr = doc.getElementById('cap_vlr')?.innerText || '0';
       
-      // Campos hidden
       const placa = doc.getElementById('placa')?.value || 'N/A';
       const usuario = doc.getElementById('usuario')?.value || 'N/A';
       const filial = doc.getElementById('filial')?.value || 'N/A';
@@ -194,14 +206,12 @@ function AbrirSSW({ conferentes, visivel, onFechar, onDadosExtraidos }) {
     setDadosExtraidos(null);
   };
 
-  // Criar opções do dropdown
   const opcoes = conferentes?.map(c => ({
     value: c.id,
-    label: `${c.nome || 'Sem nome'} (${c.usuarioSSW || 'sem usuário'})`
+    label: `${c.nome || 'Sem nome'} (${normalizarConferente(c).usuarioSSW || 'sem usuário'})`
   })) || [];
 
   console.log('📋 Opções do dropdown:', opcoes);
-  console.log('📋 Conferente selecionado ID:', conferenteSelecionadoId);
 
   return (
     <Modal
